@@ -248,21 +248,12 @@ lemma "((\<leadsto>\<^sub>V 1 \<lceil>=\<rceil> \<leadsto>\<^sub>V 2)[\<leadsto>
   by simp
 
 lemma form_size_term[simp] :
-  "(form_size (subst_term f a x)) = (form_size f)"
+  "(size (subst_term f a x)) = (size f)"
   apply (induct f rule:form_size.induct)
            apply (simp_all)
   done
 
-
-lemma form_size_gt_zero: "0 \<le> form_size f"
-  apply (induct f rule: form_size.induct)
-          apply (simp_all)
-  done
-
-function 
-  Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" 
-where
-
+fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 \<comment> \<open>base case\<close>
   "Split T           _ = T"
 | "Split (Typed v ty) _ = (Typed v ty)"
@@ -281,14 +272,7 @@ where
       (\<lambda>(i, _) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> a) T) \<lceil>\<and>\<rceil> Split f r)))"
 
 | "Split (Exi vname Edge f) r =
-  (mfold (edges (rule_lhs r)) (\<lambda>(i, _) a. Split (f[\<leadsto>\<^sub>E i/\<langle>vname\<rangle>]) r \<lceil>\<or>\<rceil> a) F) \<lceil>\<or>\<rceil>
-    (\<lceil>\<exists> vname : Edge\<rceil> ((mfold (edges (rule_lhs r)) 
-      (\<lambda>(i, _) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E i  \<lceil>\<and>\<rceil> a) T) \<lceil>\<and>\<rceil> Inc f r vname))"
-
- | "Split (Exi vname Label f) r = Exi vname Label (Split f r)"
-(* 
-\<comment> \<open>Inc\<close>
- | "Inc f r vname = ((mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. 
+  (let Inc = ((mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. 
         (mfold (nodes (rule_lhs r)) (\<lambda>(j,_) ja. (\<lceil>src \<langle>vname\<rangle>\<rceil> \<lceil>=\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> \<lceil>trg \<langle>vname\<rangle>\<rceil> \<lceil>=\<rceil> \<leadsto>\<^sub>V j 
           \<lceil>\<and>\<rceil> Split (f[\<leadsto>\<^sub>V i/\<lceil>src \<langle>vname\<rangle>\<rceil>][\<leadsto>\<^sub>V j/\<lceil>trg \<langle>vname\<rangle>\<rceil>]) r) \<lceil>\<or>\<rceil> ja) F)
     
@@ -302,18 +286,13 @@ where
  
    \<lceil>\<or>\<rceil> ((mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. \<lceil>src \<langle>vname\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> ia) T)
         \<lceil>\<and>\<rceil> (mfold (nodes (rule_lhs r)) (\<lambda>(j,_) ja. \<lceil>trg \<langle>vname\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V j \<lceil>\<and>\<rceil> ja) T)
-        \<lceil>\<and>\<rceil> Split f r))" *)
+        \<lceil>\<and>\<rceil> Split f r))
+  in
+  ((mfold (edges (rule_lhs r)) (\<lambda>(i, _) a. Split (f[\<leadsto>\<^sub>E i/\<langle>vname\<rangle>]) r \<lceil>\<or>\<rceil> a) F) \<lceil>\<or>\<rceil>
+    (\<lceil>\<exists> vname : Edge\<rceil> ((mfold (edges (rule_lhs r)) 
+      (\<lambda>(i, _) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E i  \<lceil>\<and>\<rceil> a) T) \<lceil>\<and>\<rceil> Inc))))"
 
-
-  by pat_completeness auto 
-find_theorems name:"let_cong"
- termination by size_change 
-termination 
-  using [[goals_limit = 20]]
-  apply (relation "measure (\<lambda>x. case x of Inl f \<Rightarrow> form_size (fst f) | Inr f \<Rightarrow> 1)")
-  
-  apply auto
-  sorry 
+ | "Split (Exi vname Label f) r = Exi vname Label (Split f r)"
 
 lemma "wf_ruleschema (fst r1)" by (simp add: r1_def)
 lemma "wf_ruleschema (fst r2)" by (simp add: r2_def)
@@ -323,6 +302,8 @@ lemma "
   eval g undefined (Split q1 (fst r1) \<lceil>\<longleftrightarrow>\<rceil> 
     (\<lceil>\<not>\<rceil> Split (\<lceil>\<exists> ''y'' : Edge\<rceil> (\<lceil>src \<langle>''y''\<rangle>\<rceil> \<lceil>=\<rceil> \<lceil>trg \<langle>''y''\<rangle>\<rceil>)) (fst r1)))"
   apply (simp_all add: r1_def q1_def)
+(*   apply auto *)
+  oops
   
   
 (* 
@@ -344,6 +325,7 @@ lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> e
           \<lceil>\<or>\<rceil> (\<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 2 \<lceil>\<and>\<rceil>
             \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 3 \<lceil>\<and>\<rceil> \<lceil>mark \<lceil>src \<langle>''x''\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)))))))"
   apply(simp_all add: r1_def q1_def)
+  apply auto
   oops
  
 
