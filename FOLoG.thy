@@ -131,8 +131,7 @@ fun eval :: "hostgraph \<Rightarrow> state \<Rightarrow> form \<Rightarrow> bool
 | "eval g s (Typed t ty) = undefined" \<comment> \<open>just on I and S, ...., or with variables?\<close>
 
 | "eval g s (Eq l r) = (case (etm g s l, etm g s r) of
-    (Term_Ref l', Term_Ref r') \<Rightarrow> l' = r'
-  | (Term_Val (Val_MarkNode l'), Term_Val (Val_MarkNode r')) \<Rightarrow> mark_eq_node l' r'
+    (Term_Val (Val_MarkNode l'), Term_Val (Val_MarkNode r')) \<Rightarrow> mark_eq_node l' r'
   | (Term_Val (Val_MarkEdge l'), Term_Val (Val_MarkEdge r')) \<Rightarrow> mark_eq_edge l' r'
   | (l', r') \<Rightarrow> (l' = r'))"
 
@@ -182,10 +181,42 @@ definition q2 :: form where
 text \<open>SLP\WLP construction\<close>
 
 (* Definition 27 (Specifying a totally labelled graph). *)
+
+\<comment> \<open>TODO: add typing specification!\<close>
 definition Spec :: "rulegraph \<Rightarrow> tyenv \<Rightarrow> form" where
-"Spec _ _ = T"
+"Spec g ty = 
+  (let n = mfold (nodes g) (\<lambda>(i,v) a. 
+                \<lceil>label \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (node_label v) 
+            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>V i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>V (node_mark v)
+            \<lceil>\<and>\<rceil> (if (node_rooted v) then \<lceil>rooted  \<leadsto>\<^sub>V i\<rceil> else \<lceil>unrooted  \<leadsto>\<^sub>V i\<rceil>)
+            \<lceil>\<and>\<rceil> a) T;
+       e = mfold (edges g) (\<lambda>(i,v) a.
+                \<lceil>src \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_src v)
+            \<lceil>\<and>\<rceil> \<lceil>trg \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_trg v)
+            \<lceil>\<and>\<rceil> \<lceil>label \<leadsto>\<^sub>E i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (edge_label v)
+            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>E i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>E (edge_mark v)
+            \<lceil>\<and>\<rceil> a) T
+  in n \<lceil>\<and>\<rceil> e)"
 
 (* Definition 28 (Variablisation of a condition over a graph). *)
+
+fun fconst :: "form \<Rightarrow> tm set" where
+  "fconst T = {}"
+| "fconst (Not f) = fconst f"
+| "fconst (Conj a b) = fconst a \<union> fconst b"
+| "fconst (Disj a b) = fconst a \<union> fconst b"
+| "fconst (Exi _ _ f) = fconst f"
+| "fconst (Rooted tm) = (case tm of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+    | _ \<Rightarrow> {})"
+
+| "fconst (Typed _ _) = {}"
+| "fconst (Eq a b) = (let f = (\<lambda>v. case v of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+  | Term_Ref (Eref eid) \<Rightarrow> {Term_Ref (Eref eid)}
+  | _ \<Rightarrow> {}) in f a \<union> f b)"
+
+
 fun Var1 :: "form \<Rightarrow> form" where
 "Var1 f = T"
 
@@ -208,11 +239,6 @@ lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> e
   
 lemma "eval g undefined (Dang (fst r2))"
   by (simp add: r2_def)
-
-(* Definition 45 *)
-fun App :: "rule \<Rightarrow> form" where
-"App _ = T"
-(* "App r = Var1 (Spec (lhs r) (params r) \<lceil>\<and>\<rceil> (Dang r \<lceil>\<and>\<rceil> condToForm (cond r)))" *)
 
 
 subsection \<open>term substitution\<close>
@@ -272,7 +298,7 @@ fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
       (\<lambda>(i, _) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> a) T) \<lceil>\<and>\<rceil> Split f r)))"
 
 | "Split (Exi vname Edge f) r =
-  (let Inc = ((mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. 
+  (let Inc = (mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. 
         (mfold (nodes (rule_lhs r)) (\<lambda>(j,_) ja. (\<lceil>src \<langle>vname\<rangle>\<rceil> \<lceil>=\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> \<lceil>trg \<langle>vname\<rangle>\<rceil> \<lceil>=\<rceil> \<leadsto>\<^sub>V j 
           \<lceil>\<and>\<rceil> Split (f[\<leadsto>\<^sub>V i/\<lceil>src \<langle>vname\<rangle>\<rceil>][\<leadsto>\<^sub>V j/\<lceil>trg \<langle>vname\<rangle>\<rceil>]) r) \<lceil>\<or>\<rceil> ja) F)
     
@@ -282,11 +308,10 @@ fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
       \<lceil>\<or>\<rceil> (mfold (nodes (rule_lhs r)) (\<lambda>(j,_) ja. \<lceil>src \<langle>vname\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V j \<lceil>\<and>\<rceil> ja) T
           \<lceil>\<and>\<rceil> \<lceil>trg \<langle>vname\<rangle>\<rceil> \<lceil>=\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> Split (f[\<leadsto>\<^sub>V i/\<lceil>trg \<langle>vname\<rangle>\<rceil>]) r)
     
-      \<lceil>\<or>\<rceil> ia) F)
- 
+      \<lceil>\<or>\<rceil> ia) F) 
    \<lceil>\<or>\<rceil> ((mfold (nodes (rule_lhs r)) (\<lambda>(i,_) ia. \<lceil>src \<langle>vname\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> ia) T)
         \<lceil>\<and>\<rceil> (mfold (nodes (rule_lhs r)) (\<lambda>(j,_) ja. \<lceil>trg \<langle>vname\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V j \<lceil>\<and>\<rceil> ja) T)
-        \<lceil>\<and>\<rceil> Split f r))
+        \<lceil>\<and>\<rceil> Split f r)
   in
   ((mfold (edges (rule_lhs r)) (\<lambda>(i, _) a. Split (f[\<leadsto>\<^sub>E i/\<langle>vname\<rangle>]) r \<lceil>\<or>\<rceil> a) F) \<lceil>\<or>\<rceil>
     (\<lceil>\<exists> vname : Edge\<rceil> ((mfold (edges (rule_lhs r)) 
@@ -294,28 +319,19 @@ fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 
  | "Split (Exi vname Label f) r = Exi vname Label (Split f r)"
 
+
 lemma "wf_ruleschema (fst r1)" by (simp add: r1_def)
 lemma "wf_ruleschema (fst r2)" by (simp add: r2_def)
 
-\<comment> \<open>Example 6 (Transformation Split)\<close> 
-lemma "
-  eval g undefined (Split q1 (fst r1) \<lceil>\<longleftrightarrow>\<rceil> 
-    (\<lceil>\<not>\<rceil> Split (\<lceil>\<exists> ''y'' : Edge\<rceil> (\<lceil>src \<langle>''y''\<rangle>\<rceil> \<lceil>=\<rceil> \<lceil>trg \<langle>''y''\<rangle>\<rceil>)) (fst r1)))"
-  apply (simp_all add: r1_def q1_def)
-(*   apply auto *)
-  oops
-  
-  
-(* 
-  apply (rule conjI)
-   apply (rule impI)
-   apply (rule impI)
-   apply (rule disjI1)
-  apply simp *)
-  
-  oops
 
-lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined (Split q1 (fst r1) \<lceil>\<longleftrightarrow>\<rceil>
+
+\<comment> \<open>Example 6 (Transformation Split)\<close> 
+
+lemma "eval g undefined (Split q1 (fst r1) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>\<not>\<rceil> Split (\<lceil>\<exists> ''x'' : Edge\<rceil> (\<lceil>mark \<lceil>src \<langle>''x''\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)) (fst r1)))"
+  by (metis Split.simps(7) eval.simps(2) eval.simps(3) eval.simps(4) q1_def)
+
+ 
+lemma split_q1_r1[simp]: "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined (Split q1 (fst r1) \<lceil>\<longleftrightarrow>\<rceil>
   (\<lceil>\<not>\<rceil>(\<lceil>mark \<lceil>src \<leadsto>\<^sub>E 1\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<or>\<rceil>
        \<lceil>mark \<lceil>src \<leadsto>\<^sub>E 2\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<or>\<rceil>
         (\<lceil>\<exists> ''x'' : Edge\<rceil> (\<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 1 \<lceil>\<and>\<rceil> \<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 2 \<lceil>\<and>\<rceil>
@@ -325,9 +341,13 @@ lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> e
           \<lceil>\<or>\<rceil> (\<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 2 \<lceil>\<and>\<rceil>
             \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 3 \<lceil>\<and>\<rceil> \<lceil>mark \<lceil>src \<langle>''x''\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)))))))"
   apply(simp_all add: r1_def q1_def)
-  apply auto
-  oops
- 
+  apply (rule conjI)
+   apply (rule impI)+
+  apply (simp add: dom_def)
+  apply (drule spec)
+   apply (metis (no_types, lifting))
+  apply (simp add: dom_def)
+  by blast
 
 lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r2)\<rbrakk> \<Longrightarrow> eval g undefined ((Split q2 (fst r2)) \<lceil>\<longleftrightarrow>\<rceil> 
   (\<lceil>unrooted \<leadsto>\<^sub>V 1\<rceil> \<lceil>\<or>\<rceil> (\<lceil>\<exists> ''x'' : Node\<rceil> (\<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>''x''\<rangle>\<rceil>))))"
@@ -336,18 +356,22 @@ lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r2)\<rbrakk> \<Longrightarrow> e
   
   
   
-
+section \<open>TODO: add all relevant cases, currently just support the twocolouring example.\<close>
 (* Definition 32 *)
-
 fun Val_Term :: "tm \<Rightarrow> ruleschema \<Rightarrow> tm" where
-"Val_Term (Term_Mark (Term_Ref (Nref n))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) n)))))"
+  "Val_Term (Term_Mark (Term_Ref (Nref n))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) n)))))"
 | "Val_Term (Term_Mark (Term_Ref (Eref e))) r = (Term_Val (Val_MarkEdge (edge_mark (the (edges (rule_lhs r) e)))))"
+| "Val_Term (Term_Mark (Term_Src (Term_Ref (Eref e)))) r =(Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_src (the (edges (rule_lhs r) e))))))))"
+| "Val_Term (Term_Mark (Term_Trg (Term_Ref (Eref e)))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_trg (the (edges (rule_lhs r) e))))))))"
 | "Val_Term t r = t"
 
 fun Val :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
   "Val T           _ = T"
 | "Val (Typed v ty) _ = (Typed v ty)"
-| "Val (Rooted t)   _ = (Rooted t)"
+| "Val (Rooted (Term_Ref (Nref n))) r = (case nodes (rule_lhs r) n of
+    None \<Rightarrow> F
+  | Some n' \<Rightarrow> if node_rooted n' then T else F)"
+| "Val (Rooted t) _ = Rooted t"
 
 | "Val (Eq a b)   r = (Eq (Val_Term a r) (Val_Term b r))"
 
@@ -360,21 +384,30 @@ fun Val :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 
 
 \<comment> \<open>Example 7 (Valuation of a graph condition).\<close>
-lemma "eval g undefined (Val (Split q1 (fst r1)) (fst r1)  \<lceil>\<longleftrightarrow>\<rceil> 
-  \<lceil>\<not>\<rceil>(\<lceil>\<exists> ''x'' : Edge\<rceil> (
-      \<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 1 \<lceil>\<and>\<rceil> \<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 2 \<lceil>\<and>\<rceil>
-      \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 2 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 3 \<lceil>\<and>\<rceil>
-      \<lceil>mark \<lceil>src \<langle>''x''\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)))"
-  apply (simp add: q1_def r1_def)
-  apply auto
-  
-  oops
+
+lemma "eval g undefined (\<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None) \<Longrightarrow> False"
+  by simp
+
+lemma "eval g undefined ((Val (Split q1 (fst r1)) (fst r1))  \<lceil>\<longrightarrow>\<rceil> 
+  (\<lceil>\<not>\<rceil>(\<lceil>\<exists>x : Edge\<rceil> (\<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 1 \<lceil>\<and>\<rceil> \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 2 \<lceil>\<and>\<rceil>
+        \<lceil>src \<langle>x\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>src \<langle>x\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 2 \<lceil>\<and>\<rceil> \<lceil>src \<langle>x\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 3 \<lceil>\<and>\<rceil> \<lceil>mark \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None))))"
+  apply (simp add:r1_def q1_def)
+  by auto
+
+ 
+lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined (Val (Split q1 (fst r1)) (fst r1)  \<lceil>\<longleftrightarrow>\<rceil>  
+  (\<lceil>\<not>\<rceil> (\<lceil>\<exists> ''x'' : Edge\<rceil> (\<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 1 \<lceil>\<and>\<rceil> \<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>E 2 \<lceil>\<and>\<rceil>
+    (\<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 2 \<lceil>\<and>\<rceil> \<lceil>src \<langle>''x''\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 3 \<lceil>\<and>\<rceil> 
+     \<lceil>mark \<lceil>src \<langle>''x''\<rangle>\<rceil>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)))))"
+  apply(simp add: r1_def q1_def)
+  apply (rule conjI)
+   apply (rule disjCI)
+  by auto
                                     
 lemma "eval g undefined (Val (Split q2 (fst r2)) (fst r2) \<lceil>\<longleftrightarrow>\<rceil>  
   (\<lceil>\<exists> ''x'' : Node\<rceil> (\<langle>''x''\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V 1 \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>''x''\<rangle>\<rceil>)))"
   apply (simp add: q2_def r2_def)
-  apply auto
-  oops
+  by auto
 
 type_synonym generalized_rule = "ruleschema \<times> form \<times> form"
 
@@ -391,7 +424,27 @@ fun Lift :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
 
 (* Definition 34 *)
 fun Adj :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
-"Adj _ _ = T"
+  "Adj T _ = T"
+| "Adj (Not c) r = Not (Adj c r)"
+| "Adj (Conj a b) r = Conj (Adj a r) (Adj b r)"
+| "Adj (Disj a b) r = Disj (Adj a r) (Adj b r)"
+
+
+| "Adj (Exi vname Node c) r = 
+  (let vk = dom (nodes (rule_rhs r)) - (rule_interf r);
+        f = mfold (nodes (rule_rhs r) |`vk) (\<lambda>(i,_) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> a) T
+   in Exi vname Node (f \<lceil>\<and>\<rceil> Adj c r))"
+
+  \<comment> \<open>Note: what does R-K reflect for edges?\<close>
+| "Adj (Exi vname Edge c) r = Exi vname Edge (Adj c r)"
+
+
+| "Adj (Exi vname Label c) r = Exi vname Label (Adj c r)"
+| "Adj (Rooted t) _ = Rooted t"
+| "Adj (Typed t ty) _ = Typed t ty"
+
+| "Adj (Eq a b) r = (case (a,b) of
+    _ \<Rightarrow> Eq a b)"
 \<comment> \<open>Example 9.\<close>
 
 (* Definition 35 *)
@@ -400,11 +453,17 @@ fun Shift :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
                            (Dang (ruleschema_inverse r)))"
 
 (* Definition 36 *)
-fun Post :: "form \<Rightarrow> rule \<Rightarrow> form" where
-"Post _ _ = T"
+fun Post :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
+"Post c w = Var1 (Shift c w)"
 
 
 (* https://isabelle.in.tum.de/doc/functions.pdf *)
+
+
+(* Definition 45 *)
+fun App :: "rule \<Rightarrow> form" where
+"App _ = T"
+(* "App r = Var1 (Spec (lhs r) (params r) \<lceil>\<and>\<rceil> (Dang r \<lceil>\<and>\<rceil> condToForm (cond r)))" *)
 
 
 
