@@ -71,8 +71,6 @@ definition twocolouring :: com where
 "twocolouring \<equiv> (RuleApp init ;; RuleSet {col_blue :: rule, col_red:: rule}!)! ;; 
   IF RuleSet {ill_blue :: rule, ill_red :: rule} THEN RuleApp unmark! ELSE Skip"
 
-lemma "(\<forall>a. P x \<and> Q x) \<equiv> \<not>(\<exists>a. \<not>(P x \<and> Q x))"
-  by auto
 
 abbreviation c :: "form" where
 "c == (\<lceil>\<forall> ''x'' : Node\<rceil> \<lceil>mark \<langle>''x''\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>''x''\<rangle>\<rceil>) \<lceil>\<and>\<rceil>
@@ -97,18 +95,28 @@ abbreviation f :: form where
 lemma c_impl_f : "eval g undefined (c \<lceil>\<longrightarrow>\<rceil> f)" 
   by clarsimp
 
-
-  
+ 
 
 lemma "\<turnstile> {c} twocolouring {c \<lceil>\<or>\<rceil> d}"
   apply (simp add: twocolouring_def)
   apply (rule Cons [where ?c' = f and ?d' = "c \<lceil>\<or>\<rceil> d"])
-    prefer 2
+    apply auto
+  apply (rule Comp [where ?e = e])
+\<comment> \<open>subtree I\<close>
+   apply (rule Cons [where ?c' = f and d'="f \<lceil>\<and>\<rceil> Fail (RuleApp init ;; RuleSet {col_blue::rule, col_red::rule}!)"])
+  apply auto
+
+
+(*     prefer 2
     using c_impl_f apply blast
      prefer 2
     apply auto
   apply (rule Comp [where ?e = e])
-   apply (rule Cons [where ?c' = f and ?d' = "f \<lceil>\<and>\<rceil> Fail (RuleApp init ;; RuleSet {col_blue::rule, col_red::rule}!)"])
+     apply (rule Cons [where ?c' = f and ?d' = "f \<lceil>\<and>\<rceil> Fail (RuleApp init ;; RuleSet {col_blue::rule, col_red::rule}!)"])
+       prefer 2
+       apply auto
+      prefer 2
+    apply (simp add: dom_def)
     oops
 
-end
+ *)end

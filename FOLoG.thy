@@ -1,5 +1,5 @@
 theory FOLoG
-  imports Rule Com "HOL-Library.Multiset"
+  imports Rule Com Varnames
 begin
 
 \<comment> \<open>quantifier reference\<close>
@@ -198,47 +198,6 @@ definition Spec :: "rulegraph \<Rightarrow> tyenv \<Rightarrow> form" where
             \<lceil>\<and>\<rceil> a) T
   in n \<lceil>\<and>\<rceil> e)"
 
-(* Definition 28 (Variablisation of a condition over a graph). *)
-
-fun fconst :: "form \<Rightarrow> tm set" where
-  "fconst T = {}"
-| "fconst (Not f) = fconst f"
-| "fconst (Conj a b) = fconst a \<union> fconst b"
-| "fconst (Disj a b) = fconst a \<union> fconst b"
-| "fconst (Exi _ _ f) = fconst f"
-| "fconst (Rooted tm) = (case tm of
-    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
-    | _ \<Rightarrow> {})"
-
-| "fconst (Typed _ _) = {}"
-| "fconst (Eq a b) = (let f = (\<lambda>v. case v of
-    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
-  | Term_Ref (Eref eid) \<Rightarrow> {Term_Ref (Eref eid)}
-  | _ \<Rightarrow> {}) in f a \<union> f b)"
-
-
-fun Var1 :: "form \<Rightarrow> form" where
-"Var1 f = T"
-
-
-(* Definition 30 *)
-fun Dang :: "ruleschema \<Rightarrow> form" where
-"Dang r = (let vk = dom (nodes (rule_lhs r)) - (rule_interf r) in
-  if vk = {} then T else  mfold (nodes (rule_lhs r) |`vk) (\<lambda>(i, _) a. 
-        \<lceil>indeg  \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (indeg  (rule_lhs r) i) 
-    \<lceil>\<and>\<rceil> \<lceil>outdeg \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (outdeg (rule_lhs r) i) \<lceil>\<and>\<rceil> a) T)"
-
-
-\<comment> \<open>Dang(r1) = indeg(3) = 1 \<and> outdeg(3) = 0\<close>
-lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined ((Dang (fst r1)) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>indeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 1 \<lceil>\<and>\<rceil> \<lceil>outdeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 0))"
-  apply(simp add: r1_def Let_def)
-  by blast
-  
-
-\<comment> \<open>Dang(r2) = true\<close>
-  
-lemma "eval g undefined (Dang (fst r2))"
-  by (simp add: r2_def)
 
 
 subsection \<open>term substitution\<close>
@@ -278,6 +237,59 @@ lemma form_size_term[simp] :
   apply (induct f rule:form_size.induct)
            apply (simp_all)
   done
+
+(* Definition 28 (Variablisation of a condition over a graph). *)
+
+fun fconst :: "form \<Rightarrow> tm set" where
+  "fconst T = {}"
+| "fconst (Not f) = fconst f"
+| "fconst (Conj a b) = fconst a \<union> fconst b"
+| "fconst (Disj a b) = fconst a \<union> fconst b"
+| "fconst (Exi _ _ f) = fconst f"
+| "fconst (Rooted tm) = (case tm of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+    | _ \<Rightarrow> {})"
+
+| "fconst (Typed _ _) = {}"
+| "fconst (Eq a b) = (let f = (\<lambda>v. case v of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+  | Term_Ref (Eref eid) \<Rightarrow> {Term_Ref (Eref eid)}
+  | _ \<Rightarrow> {}) in f a \<union> f b)"
+
+
+\<comment> \<open>UNIV might be to free, need to remove already given names.
+  Additionally, missing label quantifier\<close>
+fun Var1 :: "form \<Rightarrow> form" where
+"Var1 f = (let 
+  (xs, v) = zipFresh (set_to_list (fconst f)) UNIV;
+  (nids, eids) = partition (\<lambda>(t, _). case t of Term_Ref (Nref n) \<Rightarrow> True | _ \<Rightarrow> False) xs;
+  cn = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) nids f;
+  ce = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) eids cn;
+  uniqn= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> nids, (_, y) \<leftarrow> nids, x \<noteq> y] T;
+  uniqe= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> eids, (_, y) \<leftarrow> eids, x \<noteq> y] T;
+  qe = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Edge\<rceil> a) eids (uniqn \<lceil>\<and>\<rceil> uniqe \<lceil>\<and>\<rceil> ce);
+  qn = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Node\<rceil> a) nids qe
+  in qe)"
+
+
+(* Definition 30 *)
+fun Dang :: "ruleschema \<Rightarrow> form" where
+"Dang r = (let vk = dom (nodes (rule_lhs r)) - (rule_interf r) in
+  if vk = {} then T else  mfold (nodes (rule_lhs r) |`vk) (\<lambda>(i, _) a. 
+        \<lceil>indeg  \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (indeg  (rule_lhs r) i) 
+    \<lceil>\<and>\<rceil> \<lceil>outdeg \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (outdeg (rule_lhs r) i) \<lceil>\<and>\<rceil> a) T)"
+
+
+\<comment> \<open>Dang(r1) = indeg(3) = 1 \<and> outdeg(3) = 0\<close>
+lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined ((Dang (fst r1)) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>indeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 1 \<lceil>\<and>\<rceil> \<lceil>outdeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 0))"
+  apply(simp add: r1_def Let_def)
+  by blast
+  
+
+\<comment> \<open>Dang(r2) = true\<close>
+  
+lemma "eval g undefined (Dang (fst r2))"
+  by (simp add: r2_def)
 
 fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 \<comment> \<open>base case\<close>
@@ -368,6 +380,8 @@ fun Val_Term :: "tm \<Rightarrow> ruleschema \<Rightarrow> tm" where
 fun Val :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
   "Val T           _ = T"
 | "Val (Typed v ty) _ = (Typed v ty)"
+
+\<comment> \<open>Check again B(x) for rooted, true if v \<in> rule_lhs otherwise false\<close>
 | "Val (Rooted (Term_Ref (Nref n))) r = (case nodes (rule_lhs r) n of
     None \<Rightarrow> F
   | Some n' \<Rightarrow> if node_rooted n' then T else F)"
@@ -409,13 +423,15 @@ lemma "eval g undefined (Val (Split q2 (fst r2)) (fst r2) \<lceil>\<longleftrigh
   apply (simp add: q2_def r2_def)
   by auto
 
-type_synonym generalized_rule = "ruleschema \<times> form \<times> form"
+(* type_synonym generalized_rule = "ruleschema \<times> form \<times> form"
 
-
+abbreviation rule_to_grule :: "rule \<Rightarrow> generalized_rule" where 
+"rule_to_grule r  \<equiv> (fst r, T, T)"
+ *)
 text \<open>SLP\WLP construction\<close>
   
 (* Definition 33 *)
-fun Lift :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
+fun Lift :: "form \<Rightarrow> grule \<Rightarrow> form" where
 "Lift c (r, acL, _) = Val (Split (c \<lceil>\<and>\<rceil> acL) r \<lceil>\<and>\<rceil> Dang r) r"
 
 \<comment> \<open>Example 8 (Transformation Lift).\<close>
@@ -443,17 +459,19 @@ fun Adj :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 | "Adj (Rooted t) _ = Rooted t"
 | "Adj (Typed t ty) _ = Typed t ty"
 
+\<comment> \<open>Check equal case, a \<in> VL - VL \<union> EL\<close>
 | "Adj (Eq a b) r = (case (a,b) of
     _ \<Rightarrow> Eq a b)"
-\<comment> \<open>Example 9.\<close>
+
+
 
 (* Definition 35 *)
-fun Shift :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
+fun Shift :: "form \<Rightarrow> grule \<Rightarrow> form" where
 "Shift c (r, acl, acr) = ((Adj (Lift c (r, acl, acr)) r) \<lceil>\<and>\<rceil> acr \<lceil>\<and>\<rceil> Spec (rule_rhs r) (rule_ty r) \<lceil>\<and>\<rceil>
                            (Dang (ruleschema_inverse r)))"
 
 (* Definition 36 *)
-fun Post :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
+fun Post :: "form \<Rightarrow> grule \<Rightarrow> form" where
 "Post c w = Var1 (Shift c w)"
 
 
@@ -461,9 +479,9 @@ fun Post :: "form \<Rightarrow> generalized_rule \<Rightarrow> form" where
 
 
 (* Definition 45 *)
+\<comment> \<open>Missing condition, add Dang \<lceil>\<and>\<rceil> condition\<close>
 fun App :: "rule \<Rightarrow> form" where
-"App _ = T"
-(* "App r = Var1 (Spec (lhs r) (params r) \<lceil>\<and>\<rceil> (Dang r \<lceil>\<and>\<rceil> condToForm (cond r)))" *)
+"App (rs, c) = Var1 (Spec (rule_lhs rs) (rule_ty rs) \<lceil>\<and>\<rceil> (Dang rs))"
 
 
 
@@ -474,7 +492,7 @@ function (sequential)
   and Success :: "com \<Rightarrow> form" 
   and Fail    :: "com \<Rightarrow> form"
   where
-  "Slp c (RuleSet rs) = fold (\<lambda>a b. Post c a \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
+  "Slp c (RuleSet rs) = fold (\<lambda>a b. Post c (a\<^sup>\<or>) \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
 | "Pre (RuleSet rs) c = T"
 | "Success (RuleSet rs) = fold (\<lambda>a b. App a \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
 | "Fail (RuleSet rs) = (\<lceil>\<not>\<rceil> (Success (RuleSet rs)))" 
