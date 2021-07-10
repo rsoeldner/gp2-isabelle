@@ -50,7 +50,6 @@ datatype form
   | Not form ("\<lceil>\<not>\<rceil> _" [40] 40)
   | Conj form form (infixr "\<lceil>\<and>\<rceil>" 35)
   | Disj form form (infixr "\<lceil>\<or>\<rceil>" 30)
-(*   | Impl form form (infixr "\<lceil>\<longrightarrow>\<rceil>" 25) *)
   | Exi vname qty form ("\<lceil>\<exists> _ : _\<rceil> _" [0, 0, 10] 10)
   | Rooted tm ("\<lceil>rooted _\<rceil>" [50] 50)
   | Typed tm lty (infixr "\<lceil>::\<rceil>" 45)
@@ -83,8 +82,6 @@ abbreviation forall_form :: "vname \<Rightarrow> qty \<Rightarrow> form \<Righta
 "forall_form v q f \<equiv> \<lceil>\<not>\<rceil>(\<lceil>\<exists> v : q\<rceil> (\<lceil>\<not>\<rceil>f))"
 
 value "\<leadsto>\<^sub>V 1 \<lceil>=\<rceil> \<langle>''x''\<rangle>"
-
-
 
 type_synonym state = "vname \<Rightarrow> qref"
 
@@ -176,31 +173,7 @@ definition q2 :: form where
 "q2 = (\<lceil>\<exists> ''x'' : Node\<rceil> \<lceil>unrooted \<langle>''x''\<rangle>\<rceil>)"
 
 
-
-
-text \<open>SLP\WLP construction\<close>
-
-(* Definition 27 (Specifying a totally labelled graph). *)
-
-\<comment> \<open>TODO: add typing specification!\<close>
-definition Spec :: "rulegraph \<Rightarrow> tyenv \<Rightarrow> form" where
-"Spec g ty = 
-  (let n = mfold (nodes g) (\<lambda>(i,v) a. 
-                \<lceil>label \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (node_label v) 
-            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>V i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>V (node_mark v)
-            \<lceil>\<and>\<rceil> (if (node_rooted v) then \<lceil>rooted  \<leadsto>\<^sub>V i\<rceil> else \<lceil>unrooted  \<leadsto>\<^sub>V i\<rceil>)
-            \<lceil>\<and>\<rceil> a) T;
-       e = mfold (edges g) (\<lambda>(i,v) a.
-                \<lceil>src \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_src v)
-            \<lceil>\<and>\<rceil> \<lceil>trg \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_trg v)
-            \<lceil>\<and>\<rceil> \<lceil>label \<leadsto>\<^sub>E i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (edge_label v)
-            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>E i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>E (edge_mark v)
-            \<lceil>\<and>\<rceil> a) T
-  in n \<lceil>\<and>\<rceil> e)"
-
-
-
-subsection \<open>term substitution\<close>
+section \<open>Term substitution\<close>
 
 fun subst_term_term :: "tm \<Rightarrow> tm \<Rightarrow> tm \<Rightarrow> tm" where
 "subst_term_term i a x = (if i = x then a else case i of
@@ -238,59 +211,19 @@ lemma form_size_term[simp] :
            apply (simp_all)
   done
 
-(* Definition 28 (Variablisation of a condition over a graph). *)
 
-fun fconst :: "form \<Rightarrow> tm set" where
-  "fconst T = {}"
-| "fconst (Not f) = fconst f"
-| "fconst (Conj a b) = fconst a \<union> fconst b"
-| "fconst (Disj a b) = fconst a \<union> fconst b"
-| "fconst (Exi _ _ f) = fconst f"
-| "fconst (Rooted tm) = (case tm of
-    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
-    | _ \<Rightarrow> {})"
+section "SLP construction"
 
-| "fconst (Typed _ _) = {}"
-| "fconst (Eq a b) = (let f = (\<lambda>v. case v of
-    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
-  | Term_Ref (Eref eid) \<Rightarrow> {Term_Ref (Eref eid)}
-  | _ \<Rightarrow> {}) in f a \<union> f b)"
+subsection \<open>From precondition to left-application condition\<close>
 
-
-\<comment> \<open>UNIV might be to free, need to remove already given names.
-  Additionally, missing label quantifier\<close>
-fun Var1 :: "form \<Rightarrow> form" where
-"Var1 f = (let 
-  (xs, v) = zipFresh (set_to_list (fconst f)) UNIV;
-  (nids, eids) = partition (\<lambda>(t, _). case t of Term_Ref (Nref n) \<Rightarrow> True | _ \<Rightarrow> False) xs;
-  cn = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) nids f;
-  ce = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) eids cn;
-  uniqn= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> nids, (_, y) \<leftarrow> nids, x \<noteq> y] T;
-  uniqe= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> eids, (_, y) \<leftarrow> eids, x \<noteq> y] T;
-  qe = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Edge\<rceil> a) eids (uniqn \<lceil>\<and>\<rceil> uniqe \<lceil>\<and>\<rceil> ce);
-  qn = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Node\<rceil> a) nids qe
-  in qe)"
-
-
-(* Definition 30 *)
+(* Definition 5.1 Condition Dang *)
 fun Dang :: "ruleschema \<Rightarrow> form" where
 "Dang r = (let vk = dom (nodes (rule_lhs r)) - (rule_interf r) in
   if vk = {} then T else  mfold (nodes (rule_lhs r) |`vk) (\<lambda>(i, _) a. 
         \<lceil>indeg  \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (indeg  (rule_lhs r) i) 
     \<lceil>\<and>\<rceil> \<lceil>outdeg \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I (outdeg (rule_lhs r) i) \<lceil>\<and>\<rceil> a) T)"
 
-
-\<comment> \<open>Dang(r1) = indeg(3) = 1 \<and> outdeg(3) = 0\<close>
-lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined ((Dang (fst r1)) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>indeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 1 \<lceil>\<and>\<rceil> \<lceil>outdeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 0))"
-  apply(simp add: r1_def Let_def)
-  by blast
-  
-
-\<comment> \<open>Dang(r2) = true\<close>
-  
-lemma "eval g undefined (Dang (fst r2))"
-  by (simp add: r2_def)
-
+(* Definition 5.3 Transformation Split *)
 fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
 \<comment> \<open>base case\<close>
   "Split T           _ = T"
@@ -332,6 +265,146 @@ fun Split :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
  | "Split (Exi vname Label f) r = Exi vname Label (Split f r)"
 
 
+(* Definition 5.5 Valuation of c *)
+fun Val_Term :: "tm \<Rightarrow> ruleschema \<Rightarrow> tm" where
+  "Val_Term (Term_Mark (Term_Ref (Nref n))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) n)))))"
+| "Val_Term (Term_Mark (Term_Ref (Eref e))) r = (Term_Val (Val_MarkEdge (edge_mark (the (edges (rule_lhs r) e)))))"
+| "Val_Term (Term_Mark (Term_Src (Term_Ref (Eref e)))) r =(Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_src (the (edges (rule_lhs r) e))))))))"
+| "Val_Term (Term_Mark (Term_Trg (Term_Ref (Eref e)))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_trg (the (edges (rule_lhs r) e))))))))"
+| "Val_Term t r = t"
+
+fun Val :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
+  "Val T           _ = T"
+| "Val (Typed v ty) _ = (Typed v ty)"
+
+\<comment> \<open>Check again B(x) for rooted, true if v \<in> rule_lhs otherwise false\<close>
+| "Val (Rooted (Term_Ref (Nref n))) r = (case nodes (rule_lhs r) n of
+    None \<Rightarrow> F
+  | Some n' \<Rightarrow> if node_rooted n' then T else F)"
+| "Val (Rooted t) _ = Rooted t"
+
+| "Val (Eq a b)   r = (Eq (Val_Term a r) (Val_Term b r))"
+
+\<comment> \<open>inductive case\<close>
+| "Val (Conj a b) r = Conj (Val a r) (Val b r)"
+| "Val (Disj a b) r = Disj (Val a r) (Val b r)"
+| "Val (Not c)    r = Not (Val c r)"
+
+| "Val (Exi vname ty f) r = Exi vname ty (Val f r)"
+
+
+(* Definition 5.7 Transformation Lift *)
+fun Lift :: "form \<Rightarrow> grule \<Rightarrow> form" where
+"Lift c (r, acL, _) = Val (Split c r \<lceil>\<and>\<rceil> acL \<lceil>\<and>\<rceil> Dang r) r"
+
+
+
+
+subsection \<open>From left application condition to right application condition\<close>
+
+(* Definition 5.9 Adjustment *)
+fun Adj :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
+  "Adj T _ = T"
+| "Adj (Not c) r = Not (Adj c r)"
+| "Adj (Conj a b) r = Conj (Adj a r) (Adj b r)"
+| "Adj (Disj a b) r = Disj (Adj a r) (Adj b r)"
+
+
+| "Adj (Exi vname Node c) r = 
+  (let vk = dom (nodes (rule_rhs r)) - (rule_interf r);
+        f = mfold (nodes (rule_rhs r) |`vk) (\<lambda>(i,_) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> a) T
+   in Exi vname Node (f \<lceil>\<and>\<rceil> Adj c r))"
+
+  \<comment> \<open>Note: what does R-K reflect for edges?\<close>
+| "Adj (Exi vname Edge c) r = Exi vname Edge (Adj c r)"
+
+
+| "Adj (Exi vname Label c) r = Exi vname Label (Adj c r)"
+| "Adj (Rooted t) _ = Rooted t"
+| "Adj (Typed t ty) _ = Typed t ty"
+
+\<comment> \<open>Check equal case, a \<in> VL - VL \<union> EL TODO: adjust c' by replacing incon...\<close>
+| "Adj (Eq a b) r = (case (a,b) of
+    _ \<Rightarrow> Eq a b)"
+
+(* Definition 3.23 Specifying a totally labelled graph *)
+definition Spec :: "rulegraph \<Rightarrow> tyenv \<Rightarrow> form" where
+"Spec g ty = 
+  (let n = mfold (nodes g) (\<lambda>(i,v) a. 
+                \<lceil>label \<leadsto>\<^sub>V i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (node_label v) 
+            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>V i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>V (node_mark v)
+            \<lceil>\<and>\<rceil> (if (node_rooted v) then \<lceil>rooted  \<leadsto>\<^sub>V i\<rceil> else \<lceil>unrooted  \<leadsto>\<^sub>V i\<rceil>)
+            \<lceil>\<and>\<rceil> a) T;
+       e = mfold (edges g) (\<lambda>(i,v) a.
+                \<lceil>src \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_src v)
+            \<lceil>\<and>\<rceil> \<lceil>trg \<leadsto>\<^sub>E i\<rceil>   \<lceil>=\<rceil> \<leadsto>\<^sub>V (edge_trg v)
+            \<lceil>\<and>\<rceil> \<lceil>label \<leadsto>\<^sub>E i\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>L (edge_label v)
+            \<lceil>\<and>\<rceil> \<lceil>mark \<leadsto>\<^sub>E i\<rceil>  \<lceil>=\<rceil> \<triangleright>\<^sub>E (edge_mark v)
+            \<lceil>\<and>\<rceil> a) T
+  in n \<lceil>\<and>\<rceil> e)"
+
+(* Definition 5.12 Shifting *)
+fun Shift :: "grule \<Rightarrow> form" where
+"Shift (r, acl, acr) = (Adj acl r \<lceil>\<and>\<rceil> acr \<lceil>\<and>\<rceil> Spec (rule_rhs r) (rule_ty r) \<lceil>\<and>\<rceil>
+                           Dang (ruleschema_inverse r))"
+
+subsection \<open>From rigth application condition to postcondition\<close>
+
+fun fconst :: "form \<Rightarrow> tm set" where
+  "fconst T = {}"
+| "fconst (Not f) = fconst f"
+| "fconst (Conj a b) = fconst a \<union> fconst b"
+| "fconst (Disj a b) = fconst a \<union> fconst b"
+| "fconst (Exi _ _ f) = fconst f"
+| "fconst (Rooted tm) = (case tm of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+    | _ \<Rightarrow> {})"
+
+| "fconst (Typed _ _) = {}"
+| "fconst (Eq a b) = (let f = (\<lambda>v. case v of
+    Term_Ref (Nref nid) \<Rightarrow> {Term_Ref (Nref nid)}
+  | Term_Ref (Eref eid) \<Rightarrow> {Term_Ref (Eref eid)}
+  | _ \<Rightarrow> {}) in f a \<union> f b)"
+
+fun qconst :: "form \<Rightarrow> string set" where
+  "qconst T = {}"
+| "qconst (Not f) = qconst f"
+| "qconst (Conj a b) = qconst a \<union> qconst b"
+| "qconst (Disj a b) = qconst a \<union> qconst b"
+| "qconst (Exi v _ f) = {v} \<union> qconst f"
+| "qconst _ = {}"
+
+
+
+(* Definition 5.14 Formula Post and Definition 3.25 Variablisation of a condition over a graph *)
+fun Post :: "form \<Rightarrow> form" where
+"Post f = (let 
+  usedvars = qconst f;
+  (xs, v) = zipFresh (set_to_list (fconst f)) (UNIV-usedvars);
+  (nids, eids) = partition (\<lambda>(t, _). case t of Term_Ref (Nref n) \<Rightarrow> True | _ \<Rightarrow> False) xs;
+  cn = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) nids f;
+  ce = foldr (\<lambda>(ref, vn) a. a[\<langle>vn\<rangle>/ref]) eids cn;
+  uniqn= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> nids, (_, y) \<leftarrow> nids, x \<noteq> y] T;
+  uniqe= foldr (\<lambda>(x,y) a. \<langle>x\<rangle> \<lceil>\<noteq>\<rceil> \<langle>y\<rangle> \<lceil>\<and>\<rceil> a) [(x,y) . (_, x) \<leftarrow> eids, (_, y) \<leftarrow> eids, x \<noteq> y] T;
+  qe = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Edge\<rceil> a) eids (uniqn \<lceil>\<and>\<rceil> uniqe \<lceil>\<and>\<rceil> ce);
+  qn = foldr (\<lambda>(_,v) a. \<lceil>\<exists> v: Node\<rceil> a) nids qe
+  in qe)"
+
+definition Slp where
+"Slp c r = Post (Shift (fst r, Lift c (r\<^sup>\<or>), T))"
+
+
+\<comment> \<open>Dang(r1) = indeg(3) = 1 \<and> outdeg(3) = 0\<close>
+lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r1)\<rbrakk> \<Longrightarrow> eval g undefined ((Dang (fst r1)) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>indeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 1 \<lceil>\<and>\<rceil> \<lceil>outdeg  \<leadsto>\<^sub>V 3\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>I 0))"
+  apply(simp add: r1_def Let_def)
+  by blast
+  
+
+\<comment> \<open>Dang(r2) = true\<close>
+  
+lemma "eval g undefined (Dang (fst r2))"
+  by (simp add: r2_def)
+
 lemma "wf_ruleschema (fst r1)" by (simp add: r1_def)
 lemma "wf_ruleschema (fst r2)" by (simp add: r2_def)
 
@@ -367,37 +440,6 @@ lemma "\<lbrakk> wf_graph g; wf_ruleschema (fst r2)\<rbrakk> \<Longrightarrow> e
   by blast
   
   
-  
-section \<open>TODO: add all relevant cases, currently just support the twocolouring example.\<close>
-(* Definition 32 *)
-fun Val_Term :: "tm \<Rightarrow> ruleschema \<Rightarrow> tm" where
-  "Val_Term (Term_Mark (Term_Ref (Nref n))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) n)))))"
-| "Val_Term (Term_Mark (Term_Ref (Eref e))) r = (Term_Val (Val_MarkEdge (edge_mark (the (edges (rule_lhs r) e)))))"
-| "Val_Term (Term_Mark (Term_Src (Term_Ref (Eref e)))) r =(Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_src (the (edges (rule_lhs r) e))))))))"
-| "Val_Term (Term_Mark (Term_Trg (Term_Ref (Eref e)))) r = (Term_Val (Val_MarkNode (node_mark (the (nodes (rule_lhs r) (edge_trg (the (edges (rule_lhs r) e))))))))"
-| "Val_Term t r = t"
-
-fun Val :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
-  "Val T           _ = T"
-| "Val (Typed v ty) _ = (Typed v ty)"
-
-\<comment> \<open>Check again B(x) for rooted, true if v \<in> rule_lhs otherwise false\<close>
-| "Val (Rooted (Term_Ref (Nref n))) r = (case nodes (rule_lhs r) n of
-    None \<Rightarrow> F
-  | Some n' \<Rightarrow> if node_rooted n' then T else F)"
-| "Val (Rooted t) _ = Rooted t"
-
-| "Val (Eq a b)   r = (Eq (Val_Term a r) (Val_Term b r))"
-
-\<comment> \<open>inductive case\<close>
-| "Val (Conj a b) r = Conj (Val a r) (Val b r)"
-| "Val (Disj a b) r = Disj (Val a r) (Val b r)"
-| "Val (Not c)    r = Not (Val c r)"
-
-| "Val (Exi vname ty f) r = Exi vname ty (Val f r)"
-
-
-\<comment> \<open>Example 7 (Valuation of a graph condition).\<close>
 
 lemma "eval g undefined (\<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None) \<Longrightarrow> False"
   by simp
@@ -423,78 +465,25 @@ lemma "eval g undefined (Val (Split q2 (fst r2)) (fst r2) \<lceil>\<longleftrigh
   apply (simp add: q2_def r2_def)
   by auto
 
-(* type_synonym generalized_rule = "ruleschema \<times> form \<times> form"
-
-abbreviation rule_to_grule :: "rule \<Rightarrow> generalized_rule" where 
-"rule_to_grule r  \<equiv> (fst r, T, T)"
- *)
-text \<open>SLP\WLP construction\<close>
-  
-(* Definition 33 *)
-fun Lift :: "form \<Rightarrow> grule \<Rightarrow> form" where
-"Lift c (r, acL, _) = Val (Split (c \<lceil>\<and>\<rceil> acL) r \<lceil>\<and>\<rceil> Dang r) r"
-
-\<comment> \<open>Example 8 (Transformation Lift).\<close>
-(* TODO *)
-
-
-(* Definition 34 *)
-fun Adj :: "form \<Rightarrow> ruleschema \<Rightarrow> form" where
-  "Adj T _ = T"
-| "Adj (Not c) r = Not (Adj c r)"
-| "Adj (Conj a b) r = Conj (Adj a r) (Adj b r)"
-| "Adj (Disj a b) r = Disj (Adj a r) (Adj b r)"
-
-
-| "Adj (Exi vname Node c) r = 
-  (let vk = dom (nodes (rule_rhs r)) - (rule_interf r);
-        f = mfold (nodes (rule_rhs r) |`vk) (\<lambda>(i,_) a. \<langle>vname\<rangle> \<lceil>\<noteq>\<rceil> \<leadsto>\<^sub>V i \<lceil>\<and>\<rceil> a) T
-   in Exi vname Node (f \<lceil>\<and>\<rceil> Adj c r))"
-
-  \<comment> \<open>Note: what does R-K reflect for edges?\<close>
-| "Adj (Exi vname Edge c) r = Exi vname Edge (Adj c r)"
-
-
-| "Adj (Exi vname Label c) r = Exi vname Label (Adj c r)"
-| "Adj (Rooted t) _ = Rooted t"
-| "Adj (Typed t ty) _ = Typed t ty"
-
-\<comment> \<open>Check equal case, a \<in> VL - VL \<union> EL\<close>
-| "Adj (Eq a b) r = (case (a,b) of
-    _ \<Rightarrow> Eq a b)"
-
-
-
-(* Definition 35 *)
-fun Shift :: "form \<Rightarrow> grule \<Rightarrow> form" where
-"Shift c (r, acl, acr) = ((Adj (Lift c (r, acl, acr)) r) \<lceil>\<and>\<rceil> acr \<lceil>\<and>\<rceil> Spec (rule_rhs r) (rule_ty r) \<lceil>\<and>\<rceil>
-                           (Dang (ruleschema_inverse r)))"
-
-(* Definition 36 *)
-fun Post :: "form \<Rightarrow> grule \<Rightarrow> form" where
-"Post c w = Var1 (Shift c w)"
-
-
-(* https://isabelle.in.tum.de/doc/functions.pdf *)
 
 
 (* Definition 45 *)
-\<comment> \<open>Missing condition, add Dang \<lceil>\<and>\<rceil> condition\<close>
+(* \<comment> \<open>Missing condition, add Dang \<lceil>\<and>\<rceil> condition\<close>
 fun App :: "rule \<Rightarrow> form" where
 "App (rs, c) = Var1 (Spec (rule_lhs rs) (rule_ty rs) \<lceil>\<and>\<rceil> (Dang rs))"
-
+ *)
 
 
 (* Definition 46 *)
-function (sequential) 
+(* function (sequential) 
       Slp     :: "form \<Rightarrow> com \<Rightarrow> form"
   and Pre     :: "com \<Rightarrow> form \<Rightarrow> form"
   and Success :: "com \<Rightarrow> form" 
   and Fail    :: "com \<Rightarrow> form"
   where
-  "Slp c (RuleSet rs) = fold (\<lambda>a b. Post c (a\<^sup>\<or>) \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
-| "Pre (RuleSet rs) c = T"
-| "Success (RuleSet rs) = fold (\<lambda>a b. App a \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
+  "Slp c (RuleSet rs) = foldr (\<lambda>a b. Post c (a\<^sup>\<or>) \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
+| "Pre (RuleSet rs) c = T"            
+| "Success (RuleSet rs) = foldr (\<lambda>a b. (App a) \<lceil>\<or>\<rceil> b) (set_to_list rs) F"
 | "Fail (RuleSet rs) = (\<lceil>\<not>\<rceil> (Success (RuleSet rs)))" 
 
 | "Slp c (P OR Q) = (Slp c P \<lceil>\<or>\<rceil> Slp c Q)"
@@ -521,19 +510,20 @@ function (sequential)
 | "Slp _ _ = F"
 | "Pre _ _ = F"
 | "Success _ = F"
-| "Fail _ = F"
+| "Fail _ = undefined"
   by pat_completeness auto termination by size_change
- 
+ *) 
 (* Definition 43 *)
-fun Break :: "form \<Rightarrow> com \<Rightarrow> form \<Rightarrow> form" where
+(* fun Break :: "form \<Rightarrow> com \<Rightarrow> form \<Rightarrow> form" where
 "Break _ _ _ = T"
+ *)
 
-
+(* 
 (* Lemma 17 *)
 fun Wlp :: "rule \<Rightarrow> form \<Rightarrow> form" where
 "Wlp r d = (\<lceil>\<not>\<rceil>(Slp (\<lceil>\<not>\<rceil>d) (RuleApp r)))"
-
-
+ *)
+(*
 inductive 
   hoare :: "form \<Rightarrow> com \<Rightarrow> form \<Rightarrow> bool" ("\<turnstile> ({(1_)}/ (_)/ {(1_)})" 51)
 where
@@ -559,6 +549,6 @@ where
         \<Longrightarrow> \<turnstile> {c} TRY C THEN P ELSE Q {d}" |
 
   Alap: "\<lbrakk>\<turnstile> {c} C {c}; eval g undefined (Break c C d)\<rbrakk> 
-         \<Longrightarrow> \<turnstile> {c} C! {(c \<lceil>\<and>\<rceil> Fail C) \<lceil>\<or>\<rceil> d}"
+         \<Longrightarrow> \<turnstile> {c} C! {(c \<lceil>\<and>\<rceil> Fail C) \<lceil>\<or>\<rceil> d}" *)
 
 end

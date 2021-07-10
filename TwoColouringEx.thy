@@ -92,10 +92,42 @@ abbreviation f :: form where
       (\<lceil>\<forall> ''x'' : Edge\<rceil>  \<lceil>mark \<langle>''x''\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>E RuleMarkEdge_None)"
 
 
+lemma "eval g undefined (Slp f (init:: rule)  \<lceil>\<longleftrightarrow>\<rceil> 
+  ((\<lceil>\<exists>y: Node\<rceil> (\<lceil>\<forall>x: Node\<rceil> (\<langle>x\<rangle> \<lceil>=\<rceil> \<langle>y\<rangle> 
+    \<lceil>\<or>\<rceil> ((\<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Red \<lceil>\<or>\<rceil> \<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Blue \<lceil>\<or>\<rceil> \<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None)\<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>x\<rangle>\<rceil>)) 
+  \<lceil>\<and>\<rceil> \<lceil>mark \<langle>y\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Red \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>y\<rangle>\<rceil>)) \<lceil>\<and>\<rceil> (\<lceil>\<forall>x: Edge\<rceil> (\<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>E RuleMarkEdge_None))))"
+  apply (simp add: Slp_def init_def)
+  apply auto
+  sorry
+
+
 lemma c_impl_f : "eval g undefined (c \<lceil>\<longrightarrow>\<rceil> f)" 
   by clarsimp
 
- 
+(* section \<open>Proof of Fail output\<close> *)
+(* 
+lemma "eval g undefined (Fail (RuleSet {col_blue::rule, col_red::rule}) \<lceil>\<longleftrightarrow>\<rceil> 
+  (\<lceil>\<not>\<rceil>(\<lceil>\<exists> x: Edge\<rceil> ((((\<lceil>mark \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Red \<lceil>\<or>\<rceil> \<lceil>mark \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Blue) \<lceil>\<and>\<rceil> \<lceil>mark \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None) \<lceil>\<or>\<rceil>
+                     ((\<lceil>mark \<lceil>trg \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Red \<lceil>\<or>\<rceil> \<lceil>mark \<lceil>trg \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_Blue) \<lceil>\<and>\<rceil> \<lceil>mark \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>=\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None) ) \<lceil>\<and>\<rceil>
+  \<lceil>unrooted \<lceil>src \<langle>x\<rangle>\<rceil>\<rceil> \<lceil>\<and>\<rceil> \<lceil>unrooted \<lceil>trg \<langle>x\<rangle>\<rceil>\<rceil>) )))"
+  apply auto
+  oops
+
+lemma "eval g undefined (Fail (RuleApp init ;; RuleSet {col_blue::rule, col_red::rule}!) \<lceil>\<longleftrightarrow>\<rceil> 
+  (\<lceil>\<not>\<rceil>(\<lceil>\<exists> x : Node\<rceil> (\<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>=\<rceil>  \<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>x\<rangle>\<rceil>))))"
+  apply auto
+  sorry
+
+
+lemma "eval g undefined (Fail (RuleApp unmark) \<lceil>\<longleftrightarrow>\<rceil> (\<lceil>\<not>\<rceil>(\<lceil>\<exists>x:Node\<rceil> (\<lceil>mark \<langle>x\<rangle>\<rceil> \<lceil>\<noteq>\<rceil> \<triangleright>\<^sub>V RuleMarkNode_None \<lceil>\<and>\<rceil> \<lceil>unrooted \<langle>x\<rangle>\<rceil>))))"
+  apply (simp add: unmark_def)
+  apply (rule conjI)
+   apply (rule disjI1)
+   apply (simp add: set_to_list_def)
+   apply (rule someI2_ex)
+  apply (metis empty_set list.simps(15))
+  apply (induct g rule: eval.induct)
+
 
 lemma "\<turnstile> {c} twocolouring {c \<lceil>\<or>\<rceil> d}"
   apply (simp add: twocolouring_def)
@@ -104,8 +136,10 @@ lemma "\<turnstile> {c} twocolouring {c \<lceil>\<or>\<rceil> d}"
   apply (rule Comp [where ?e = e])
 \<comment> \<open>subtree I\<close>
    apply (rule Cons [where ?c' = f and d'="f \<lceil>\<and>\<rceil> Fail (RuleApp init ;; RuleSet {col_blue::rule, col_red::rule}!)"])
-  apply auto
-
+     apply auto
+    prefer 2
+  oops
+ *)
 
 (*     prefer 2
     using c_impl_f apply blast
