@@ -3,7 +3,7 @@ theory Rule
 begin
 
 datatype lty = Aty | Ity | Sty | Lty
-type_synonym tyenv = "vname \<rightharpoonup> lty"
+type_synonym tyenv = "(vname, lty) mapping"
 
 
 record ruleschema =
@@ -20,8 +20,8 @@ fun wf_ruleschema :: "ruleschema \<Rightarrow> bool" where
 "wf_ruleschema r = 
   ( wf_graph (rule_lhs r) 
   \<and> wf_graph (rule_rhs r) 
-  \<and> rule_interf r \<subseteq> (dom (nodes (rule_lhs r)))
-  \<and> rule_interf r \<subseteq> (dom (nodes (rule_rhs r)))) " 
+  \<and> rule_interf r \<subseteq> (Mapping.keys (nodes (rule_lhs r)))
+  \<and> rule_interf r \<subseteq> (Mapping.keys (nodes (rule_rhs r)))) " 
 \<comment> \<open>TODO add var restrictions\<close>
 
 

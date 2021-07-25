@@ -1,22 +1,48 @@
 theory Varnames
-  imports Main Common
+  imports Main Common 
 begin
 
+fun fresh :: "nat set \<Rightarrow> nat \<times> nat set" where
+"fresh X = (if X = {} then (0, {0}) else (let n = Suc (Max X) in (n, insert n X)))"
 
+(*  lemma a : "\<lbrakk>\<exists>x. P x\<rbrakk> \<Longrightarrow> (LEAST x:: nat. x \<noteq> v \<and> P x) = min v (LEAST x. P x)"
+   apply (rule Least_equality)
+    apply (simp add: min_def)
 
-fun fresh :: "string set \<Rightarrow> string \<times> string set" where
-"fresh v = (let 
-  e = (SOME x. x \<in> v);
-  r = v - {e} in (e,r))"
-
-fun zipFresh :: "'a list \<Rightarrow> string set \<Rightarrow> ('a \<times> string) list \<times> string set" where
-"zipFresh ts v = 
-  foldr (\<lambda>t (l, u). (let (n, u') = fresh u in ((t, n) # l, u'))) ts ([], v)"
-(* 
-fun splitWith :: "'a list \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> 'a list \<times> 'a list" where
-"splitWith t p = foldr (\<lambda>e (l,r). if p e then (e#l,r) else (l, e#r)) t ([],[])"
-
-lemma "splitWith [1,2,3,4,5,6,7,8,9,10] even = ([2,4,6,8,10],[1,3,5,7,9])"
-  by simp
+   sorry
  *)
+
+(* ma "fresh {0,1,2::nat} = x"
+  apply (simp add: fresh_def)
+  s *)
+
+
+(* fun fresh :: "'a :: linorder set \<Rightarrow> 'a \<times> 'a set" where
+"fresh V = (let 
+  e = (LEAST x. x \<in> V);
+  r = V - {e} in (e,r))"
+ *)
+
+(* lemma "fresh (UNIV-{0,1,2::nat}) = x"
+  apply (simp) *)
+(* 
+
+lemma l: "\<lbrakk>\<exists>x. P x\<rbrakk> \<Longrightarrow> (LEAST x:: 'a :: wellorder. x = v \<or> P x) = min v (LEAST x. P x)"
+   using [[show_types, show_sorts]]
+   apply (rule Least_equality)
+    apply (metis LeastI min_def)
+   by (meson Least_le min_le_iff_disj order_refl)
+
+lemma l2[simp]: "(LEAST x ::'a :: order. x = v) = v"
+  by (simp add: Least_equality)
+ *)
+(*
+lemma "fresh {1::nat,2} = x"
+  apply (simp add: Let_def l l2 min_def)
+ *)
+
+fun zipFresh :: "'a list \<Rightarrow> nat set \<Rightarrow> ('a \<times> nat) list \<times> nat set" where
+"zipFresh ts V = 
+  foldr (\<lambda>t (l, u). (let (n, u') = fresh u in ((t, n) # l, u'))) ts ([], V)"
+
 end

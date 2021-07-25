@@ -1,5 +1,5 @@
 theory Graph
-  imports Main Common
+  imports Main Common "HOL-Library.AList_Mapping"
 begin
 
 type_synonym noderef = nat
@@ -17,16 +17,16 @@ record ('m, 'l) edge =
   edge_label :: 'l
   
 record ('nm, 'em, 'l) graph =       
-  nodes :: "noderef \<rightharpoonup> ('nm, 'l) node"
-  edges :: "edgeref \<rightharpoonup> ('em, 'l) edge"
+  nodes :: "(noderef, ('nm, 'l) node) mapping"
+  edges :: "(edgeref, ('em, 'l) edge) mapping"
 
 
 definition empty_graph :: "('nm, 'em, 'l) graph" where
-"empty_graph = \<lparr>nodes = Map.empty, edges = Map.empty\<rparr>"
+"empty_graph = \<lparr>nodes = Mapping.empty, edges = Mapping.empty\<rparr>"
 
 fun wf_graph :: "('nm, 'em, 'l) graph \<Rightarrow> bool" where
-"wf_graph gr = (\<forall>e \<in> dom (edges gr). 
-    edge_trg (the (edges gr e)) \<in> dom (nodes gr) \<and> edge_src (the (edges gr e)) \<in> dom (nodes gr))"
+"wf_graph gr = (\<forall>e \<in> Mapping.keys (edges gr). 
+    edge_trg (the (Mapping.lookup (edges gr) e)) \<in> Mapping.keys (nodes gr) \<and> edge_src (the (Mapping.lookup (edges gr) e)) \<in> Mapping.keys (nodes gr))"
 (* 
 definition ex :: graph where
 "ex = \<lparr> nodes = [1 \<mapsto> node, 2 \<mapsto> node]
@@ -38,6 +38,8 @@ fun indeg :: "('nm, 'em, 'l) graph \<Rightarrow> noderef \<Rightarrow> nat" wher
 "indeg gr n = mfold (edges gr) 
                     (\<lambda>(_,v) b. if edge_trg v = n then Suc b else b)
                     0"
+
+
 
 fun outdeg :: "('nm, 'em, 'l) graph \<Rightarrow> noderef \<Rightarrow> nat" where
 "outdeg gr n = mfold (edges gr) 
@@ -97,7 +99,7 @@ type_synonym hostgraph
 
 section \<open>Rulegraph\<close>
 
-type_synonym vname = string
+type_synonym vname = nat
 
 datatype rulelabel_atom 
   = I int 
